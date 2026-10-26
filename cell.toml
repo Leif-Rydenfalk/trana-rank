@@ -1,0 +1,6 @@
+# trana.rank — one deterministic ranking over items and votes.
+name = "trana.rank"
+
+[api]
+input = "{\"items\": [{\"id\": string, \"space\": number, \"ts\": number}], \"votes\": [{\"item\": number, \"actor\": number, \"dir\": number, \"q\": number, \"ts\": number}], \"trust\": [number], \"actor_space\": [number], \"now\": number, \"k\": number}"
+output = "{\"items\": [{\"id\": string, \"score\": number, \"mean\": number, \"volume\": number, \"div\": number, \"nov\": number}], \"bucket\": number, \"hash\": string}"
