@@ -222,7 +222,9 @@ is still a CRDT: leases are LWW per `(task, actor)` with a monotone `lease_until
 | re-rank after +100k votes | 1.15 s | reference prototype; incremental is O(affected) |
 | 2M items / 20M votes | 1.70 s | linear within memory effects |
 | sybil: 5k identities on one item | **not in top 20** | position `None`; before the `mean·volume` defence it was #1 |
-| brigade: 300 votes from one space | **out of top 5** | at `β=0` it is #1 (0.265); with `β=1.2`, HHI 0.93 → `div` 0.518 → 0.137 |
+| sybil (Rust): 5k identities on a rank-100 item | **rank −1 (outside top 200)** | fresh identities at trust 0.05, q 0.1 |
+| brigade (Rust): 300 votes, one space, trust 0.9 | **#1 either way; score 0.82 → 0.40** | `div` 0.48 at HHI 1.0 — a tax, not a veto |
+| brigade: 25 votes, one space | **out of top 5** | the earlier prototype case; scale matters |
 
 Capacity sketch: at 100M items / 1B votes, shard into 16 workers of ~1.4 GB, each ranking its slice
 in ~8 s per bucket — i.e. one bucket of slack per core, or rank on demand from a warm accumulator
