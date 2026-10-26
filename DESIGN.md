@@ -1,7 +1,7 @@
 # Trana Rank — a distributed, mergeable ranking algorithm
 
-Status: design + measured prototype (2026-10-26). Prototype: `trana_rank.py`. Numbers below are
-from that file on an M-series Mac, single core.
+Status: design + implementation (2026-10-26). Reference implementation: `Leif-Rydenfalk/trana-rank-cell`
+(Rust, published as the `trana.rank` cell). Numbers are single-core on an M-series Mac.
 
 ---
 
@@ -24,8 +24,9 @@ ever add. That single choice gives:
 - **edge cacheability** — a tile is immutable for `(bucket, params_hash)`;
 - **replayability** — rebuild any tile ever served from the log.
 
-Prototype results (1M items, 10M votes): full rank **0.85 s**, 8-shard merge **identical**,
-deterministic hash **stable**, 5,000 fresh identities upvoting one item **do not enter the top 20**.
+Measured (1M items, 10M votes, Rust): full rank **0.86 s**, 8-shard merge **identical**,
+deterministic hash **stable**. In the reference prototype, 5,000 fresh identities upvoting one item
+**do not enter the top 20**, and a 300-vote single-space brigade falls out of the top 5.
 
 ---
 
@@ -213,13 +214,13 @@ is still a CRDT: leases are LWW per `(task, actor)` with a monotone `lease_until
 
 | workload | time | notes |
 |---|---|---|
-| generate 1M items / 10M votes | 0.6 s | synthetic, numpy |
-| **full rank 1M / 10M** | **0.85 s** | single core, includes HHI |
-| 8 shards + merge, 1M / 10M | 2.69 s | sequential slicing; parallel wall ≈ 0.35 s |
-| merge equality | **exact** | `np.array_equal(merged, global)` |
-| determinism | **stable** | sha256 over ids+scores, two runs |
-| re-rank after +100k votes | 1.15 s | full recompute; incremental is O(affected) |
-| 2M items / 20M votes | 2.16 s | linear within memory effects |
+| generate 1M items / 10M votes | 0.27 s | Rust, xorshift generator |
+| **full rank 1M / 10M** | **0.86 s** | single core, includes HHI |
+| 8 shards + merge, 1M / 10M | 0.51 s | sequential re-slice in the benchmark; real shards hold pre-sliced state |
+| merge equality | **exact** | same ids *and* same score bits as the global ranking |
+| determinism | **stable** | FNV over ids+scores, same input → same hash |
+| re-rank after +100k votes | 1.15 s | reference prototype; incremental is O(affected) |
+| 2M items / 20M votes | 1.70 s | linear within memory effects |
 | sybil: 5k identities on one item | **not in top 20** | position `None`; before the `mean·volume` defence it was #1 |
 | brigade: 300 votes from one space | **out of top 5** | at `β=0` it is #1 (0.265); with `β=1.2`, HHI 0.93 → `div` 0.518 → 0.137 |
 
