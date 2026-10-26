@@ -13,8 +13,8 @@ so shards merge exactly, tiles are deterministic and edge-cacheable, and a vote 
 - `cell.toml` — name and the shape of the one line in and out.
 
 Measured on 1M items / 10M votes (Rust): full rank 0.86 s; 8-shard merge identical to global (same
-score bits); deterministic hash stable. Sybil and brigade checks in the reference prototype: 5k fresh
-identities do not enter the top 20; a single-space brigade is #1 without the diversity term and out
-of the top 5 with it.
+score bits); deterministic hash stable. Attack checks ship in the cell: `{"attack":"sybil","fake":5000}` takes a rank-100 item to outside
+the top 200; `{"attack":"brigade","fake":300,"trust":0.9}` shows the diversity term halving a
+brigade's score (0.82 → 0.40) without unseating it — a tax, not a veto.
 
 MIT.
