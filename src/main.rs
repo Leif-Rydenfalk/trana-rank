@@ -58,6 +58,10 @@ fn main() {
         bench(&v["bench"]);
         return;
     }
+    if v.get("attack").is_some() {
+        attack(&v);
+        return;
+    }
 
     let now = v["now"].as_f64().unwrap_or(1_792_974_000.0);
     let k = v["k"].as_u64().unwrap_or(10) as usize;
@@ -158,6 +162,78 @@ fn hash(ranked: &[Scored]) -> String {
         }
     }
     format!("{:016x}", h)
+}
+
+// ---------- attack checks: sybil and brigade, on the same scoring code ----------
+
+fn attack(v: &Value) {
+    let kind = v["attack"].as_str().unwrap_or("sybil");
+    let n_items = v["items"].as_u64().unwrap_or(200_000) as usize;
+    let n_votes = v["votes"].as_u64().unwrap_or(2_000_000) as usize;
+    let n_actors = v["actors"].as_u64().unwrap_or(50_000) as usize;
+    let n_spaces = v["spaces"].as_u64().unwrap_or(2_000) as u32;
+    let n_fake = v["fake"].as_u64().unwrap_or(5_000) as usize;
+    let now = 1_792_974_000.0;
+    let mut rng = Rng(0xDEADBEEF12345678);
+
+    let mut items: Vec<Item> = (0..n_items).map(|i| Item {
+        id: format!("i{}", i), space: rng.range(n_spaces as u64) as u32,
+        ts: now - (-rng.f().max(1e-9).ln()) * 6.0 * 3600.0,
+    }).collect();
+    let trust: Vec<f64> = (0..n_actors).map(|_| { let x = rng.f(); x * x }).collect();
+    let actor_space: Vec<u32> = (0..n_actors).map(|_| rng.range(n_spaces as u64) as u32).collect();
+    let mut votes: Vec<Vote> = (0..n_votes).map(|_| Vote {
+        item: rng.range(n_items as u64) as u32,
+        actor: rng.range(n_actors as u64) as u32,
+        dir: if rng.f() < 0.82 { 1.0 } else { -1.0 },
+        q: rng.f() * 0.7 + 0.15,
+        ts: now - (-rng.f().max(1e-9).ln()) * 3.0 * 3600.0,
+    }).collect();
+
+    let p = Params::default();
+    let base = rank(&items, &votes, &trust, &actor_space, now, 200, &p, n_spaces);
+    let base_pos = |r: &[Scored], id: usize| r.iter().position(|x| x.idx == id).map(|x| x as i64);
+    let victim_base = base.len() / 2;                 // a mid-ranked item, so movement is visible
+    let victim = base[victim_base].idx;
+    let victim_rank_base = victim_base as i64;
+
+    if kind == "sybil" {
+        let mut t2 = trust.clone();
+        let mut sp2 = actor_space.clone();
+        for k in 0..n_fake {
+            let a = (n_actors + k) as u32;
+            votes.push(Vote { item: victim as u32, actor: a, dir: 1.0, q: 0.1, ts: now });
+            t2.push(0.05);
+            sp2.push(rng.range(n_spaces as u64) as u32);
+        }
+        let r = rank(&items, &votes, &t2, &sp2, now, 200, &p, n_spaces);
+        println!("{}", json!({"attack": kind, "fake": n_fake, "victim": items[victim].id,
+            "rank_before": victim_rank_base, "rank_after": base_pos(&r, victim).unwrap_or(-1),
+            "top5": r.iter().take(5).map(|x| items[x.idx].id.clone()).collect::<Vec<_>>()}));
+    } else {
+        // every fake vote comes from one space: new actors whose home space is the victim's
+        let sp0 = items[victim].space;
+        let mut t2 = trust.clone();
+        let mut sp2 = actor_space.clone();
+        for k in 0..n_fake {
+            let a = (n_actors + k) as u32;
+            votes.push(Vote { item: victim as u32, actor: a, dir: 1.0, q: 0.9, ts: now });
+            t2.push(v["trust"].as_f64().unwrap_or(0.9));
+            sp2.push(sp0);
+        }
+        let mut runs = Vec::new();
+        for beta in [0.0f64, 1.2] {
+            let mut pp = Params::default(); pp.beta = beta;
+            let r = rank(&items, &votes, &t2, &sp2, now, 200, &pp, n_spaces);
+            let v = r.iter().find(|x| x.idx == victim);
+            runs.push(json!({"beta": beta, "rank": base_pos(&r, victim).unwrap_or(-1),
+                "div": v.map(|x| round(x.div, 3)).unwrap_or(0.0),
+                "score": v.map(|x| round(x.score, 4)).unwrap_or(0.0)}));
+        }
+        println!("{}", json!({"attack": kind, "brigade": n_fake, "victim": items[victim].id,
+            "rank_before": victim_rank_base, "runs": runs}));
+    }
+    let _ = &mut items;
 }
 
 // ---------- synthetic benchmark: same generator as the reference prototype ----------
